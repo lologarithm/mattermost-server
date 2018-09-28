@@ -508,25 +508,20 @@ func UpgradeDatabaseToVersion54(sqlStore SqlStore) {
 }
 
 func UpgradeDatabaseToVersion55(sqlStore SqlStore) {
-	if shouldPerformUpgrade(sqlStore, VERSION_5_4_0, VERSION_5_5_0) {
-		if err := migrateGroups(sqlStore); err != nil {
-			mlog.Critical(err.Error())
-			time.Sleep(time.Second)
-			os.Exit(EXIT_GENERIC_FAILURE)
-		}
-		saveSchemaVersion(sqlStore, VERSION_5_5_0)
+	// if shouldPerformUpgrade(sqlStore, VERSION_5_4_0, VERSION_5_5_0) {
+	if err := migrateGroups(sqlStore); err != nil {
+		mlog.Critical(err.Error())
+		time.Sleep(time.Second)
+		os.Exit(EXIT_GENERIC_FAILURE)
 	}
+	// 	saveSchemaVersion(sqlStore, VERSION_5_5_0)
+	// }
 }
 
 func migrateGroups(sqlStore SqlStore) error {
 	sqlStore.CreateIndexIfNotExists("idx_groupmembers_create_at", "GroupMembers", "CreateAt")
 	// sqlStore.CreateIndexIfNotExists("idx_groups_remote_id", "Groups", "RemoteId")
 	// sqlStore.CreateUniqueIndexIfNotExists("ux_groups_type_remote_id", "Groups", []string{"Type", "RemoteId"})
-
-	transaction, err := sqlStore.GetMaster().Begin()
-	if err != nil {
-		return err
-	}
 
 	foreignKeys := [][]string{
 		[]string{"GroupMembers", "GroupId", "Groups(Id)"},
@@ -541,13 +536,10 @@ func migrateGroups(sqlStore SqlStore) error {
 
 	for _, item := range foreignKeys {
 		sql := fmt.Sprintf("ALTER TABLE %s ADD FOREIGN KEY (%s) REFERENCES %s", item[0], item[1], item[2])
-		if _, err := transaction.Exec(sql); err != nil {
+		if _, err := sqlStore.GetMaster().Exec(sql); err != nil {
+			fmt.Printf("%s\n", err.Error())
 			return err
 		}
-	}
-
-	if err := transaction.Commit(); err != nil {
-		return err
 	}
 
 	return nil
